@@ -32,7 +32,7 @@ jobs:
           make
           sudo make install
 
-      - name: Create crosstool-NG config
+      - name: Create crosstool-NG config and Build
         run: |
           mkdir -p /tmp/build-dir
           cd /tmp/build-dir
@@ -41,7 +41,7 @@ jobs:
           sed -i 's/CT_ARCH_ARCH="armv8-a+crc"/CT_ARCH_ARCH="armv8-a"/' .config
           sed -i 's/CT_ARCH_CPU="cortex-a53"/CT_ARCH_CPU=""/' .config
           sed -i 's/CT_ARCH_TUNE="cortex-a53"/CT_ARCH_TUNE=""/' .config
-          ct-ng build
+          ct-ng build --retry=5 --connect-timeout=30
 
       - name: Package the toolchain
         run: |
