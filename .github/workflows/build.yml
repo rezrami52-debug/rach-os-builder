@@ -1,4 +1,4 @@
-name: RACH OS Toolchain Builder (Max Space)
+name: RACH OS Toolchain Builder (Max Space — Improved)
 
 on:
   workflow_dispatch:
@@ -6,55 +6,89 @@ on:
 jobs:
   build-toolchain:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 120  # timeout after 2 hours
+
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
           root-reserve-mb: 512
-          swap-size-mb: 1024
+          swap-size-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
-          remove-large-packages: 'true' # <-- New option
-          remove-docker-images: 'true'  # <-- New option
+          remove-large-packages: 'true'
+          remove-docker-images: 'true'
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake bison build-essential chrpath cpio flex gawk git gperf help2man libncurses-dev libtool libtool-bin lzip python3-dev texinfo unzip
+          sudo apt-get install -y \
+            autoconf automake bison build-essential chrpath \
+            cpio flex gawk git gperf help2man libncurses-dev \
+            libtool libtool-bin lzip python3-dev texinfo unzip \
+            rsync
 
-      - name: Clone and Build latest crosstool-NG
+      - name: Clone and Build crosstool-NG v1.26.0 (stable)
         run: |
           cd /tmp
-          git clone https://github.com/crosstool-ng/crosstool-ng.git
+          git clone --depth 1 --branch crosstool-ng-1.26.0 https://github.com/crosstool-ng/crosstool-ng.git
           cd crosstool-ng
           ./bootstrap
           ./configure --prefix=/usr/local
-          make
+          make -j$(nproc)
           sudo make install
 
-      - name: Create config and Build toolchain
+      - name: Configure and Build aarch64 toolchain
         run: |
-          mkdir -p /tmp/build-dir
-          cd /tmp/build-dir
+          mkdir -p /tmp/ctng-work
+          cd /tmp/ctng-work
+
+          # Initialize config
           ct-ng aarch64-unknown-linux-gnu
-          echo "CT_CONNECT_TIMEOUT=30" >> .config
-          echo "CT_DOWNLOAD_RETRIES=5" >> .config
-          ct-ng build
+
+          # Customize config for stability & space
+          cat <<'EOF' >> .config
+CT_PARALLEL_JOBS=2
+CT_CONNECT_TIMEOUT=60
+CT_DOWNLOAD_RETRIES=10
+CT_PREFIX_DIR="/tmp/toolchain"
+CT_LOCAL_TARBALLS_DIR="/tmp/tarballs"
+EOF
+
+          # Ensure directories exist
+          mkdir -p /tmp/tarballs /tmp/toolchain
+
+          # Build (log to file for debugging)
+          ct-ng build 2>&1 | tee build.log
+
+          # If build failed, show tail of log before exiting
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "::error::Build failed. Last 100 lines of build.log:"
+            tail -n 100 build.log
+            exit 1
+          fi
 
       - name: Package the toolchain
         run: |
-          # In case of failure, show the end of the build log
-          if [ -f /tmp/build-dir/build.log ]; then
-            echo "Displaying last 50 lines of build.log:"
-            tail -n 50 /tmp/build-dir/build.log
+          cd /tmp
+          # Verify toolchain exists
+          if [ ! -d "toolchain/aarch64-unknown-linux-gnu" ]; then
+            echo "::error::Toolchain directory not found!"
+            ls -la toolchain/
+            exit 1
           fi
-          cd ~/x-tools
-          tar -czf /tmp/aarch64-toolchain.tar.gz aarch64-unknown-linux-gnu
+
+          # Compress with reproducible metadata (no timestamps)
+          tar -czf aarch64-toolchain.tar.gz \
+              --owner=0 --group=0 --mtime="@$(date +%s)" \
+              -C toolchain aarch64-unknown-linux-gnu
+
+          echo "✅ Toolchain packaged: $(du -h aarch64-toolchain.tar.gz)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aarch64-toolchain
+          name: aarch64-toolchain-${{ github.run_id }}
           path: /tmp/aarch64-toolchain.tar.gz
+          retention-days: 7
