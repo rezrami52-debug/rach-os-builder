@@ -37,14 +37,21 @@ jobs:
           mkdir -p /tmp/build-dir
           cd /tmp/build-dir
           ct-ng aarch64-rpi3-linux-gnu
-          # Modify config for generic aarch64
+          # Modify config for generic aarch64 and download options
           sed -i 's/CT_ARCH_ARCH="armv8-a+crc"/CT_ARCH_ARCH="armv8-a"/' .config
           sed -i 's/CT_ARCH_CPU="cortex-a53"/CT_ARCH_CPU=""/' .config
           sed -i 's/CT_ARCH_TUNE="cortex-a53"/CT_ARCH_TUNE=""/' .config
-          ct-ng build --retry=5 --connect-timeout=30
+          echo "CT_CONNECT_TIMEOUT=30" >> .config
+          echo "CT_DOWNLOAD_RETRIES=5" >> .config
+          ct-ng build
 
       - name: Package the toolchain
         run: |
+          # In case of failure, show the end of the build log
+          if [ -f /tmp/build-dir/build.log ]; then
+            echo "Displaying last 50 lines of build.log:"
+            tail -n 50 /tmp/build-dir/build.log
+          fi
           cd ~/x-tools
           tar -czf /tmp/aarch64-toolchain.tar.gz aarch64-rpi3-linux-gnu
 
