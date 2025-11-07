@@ -1,18 +1,55 @@
-name: RACH OS Builder Test
+name: RACH OS Toolchain Builder
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-toolchain:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Print a message
-        run: echo "Hello, RACH OS! The factory is working!"
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 512
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
 
-      - name: List files
-        run: ls -la
-        
+      - name: Install crosstool-NG dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake bison build-essential chrpath cpio flex gawk git gperf help2man libncurses-dev libtool libtool-bin lzip python3-dev texinfo unzip
+
+      - name: Build and Install crosstool-NG
+        run: |
+          cd /tmp
+          wget http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.25.0.tar.xz
+          tar -xf crosstool-ng-1.25.0.tar.xz
+          cd crosstool-ng-1.25.0
+          ./configure --prefix=/usr/local
+          make
+          sudo make install
+
+      - name: Create crosstool-NG config
+        run: |
+          mkdir -p /tmp/build-dir
+          cd /tmp/build-dir
+          ct-ng aarch64-rpi3-linux-gnu
+          # Modify config for generic aarch64
+          sed -i 's/CT_ARCH_ARCH="armv8-a+crc"/CT_ARCH_ARCH="armv8-a"/' .config
+          sed -i 's/CT_ARCH_CPU="cortex-a53"/CT_ARCH_CPU=""/' .config
+          sed -i 's/CT_ARCH_TUNE="cortex-a53"/CT_ARCH_TUNE=""/' .config
+          ct-ng build
+
+      - name: Package the toolchain
+        run: |
+          cd ~/x-tools
+          tar -czf /tmp/aarch64-toolchain.tar.gz aarch64-rpi3-linux-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aarch64-toolchain
+          path: /tmp/aarch64-toolchain.tar.gz
