@@ -37,12 +37,13 @@ jobs:
           mkdir -p /tmp/build-dir
           cd /tmp/build-dir
           ct-ng aarch64-rpi3-linux-gnu
-          # Modify config for generic aarch64 and download options
+          # Modify config for generic aarch64 and robust download
           sed -i 's/CT_ARCH_ARCH="armv8-a+crc"/CT_ARCH_ARCH="armv8-a"/' .config
           sed -i 's/CT_ARCH_CPU="cortex-a53"/CT_ARCH_CPU=""/' .config
           sed -i 's/CT_ARCH_TUNE="cortex-a53"/CT_ARCH_TUNE=""/' .config
           echo "CT_CONNECT_TIMEOUT=30" >> .config
           echo "CT_DOWNLOAD_RETRIES=5" >> .config
+          echo "CT_USE_GIT=y" >> .config # <-- The new, critical line
           ct-ng build
 
       - name: Package the toolchain
