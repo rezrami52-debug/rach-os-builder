@@ -1,4 +1,4 @@
-name: RACH OS Toolchain Builder (Git Version)
+name: RACH OS Toolchain Builder (Max Space)
 
 on:
   workflow_dispatch:
@@ -16,6 +16,8 @@ jobs:
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
+          remove-large-packages: 'true' # <-- New option
+          remove-docker-images: 'true'  # <-- New option
 
       - name: Install dependencies
         run: |
@@ -36,8 +38,7 @@ jobs:
         run: |
           mkdir -p /tmp/build-dir
           cd /tmp/build-dir
-          ct-ng aarch64-unknown-linux-gnu # Using a more generic sample
-          # Add download robustness settings
+          ct-ng aarch64-unknown-linux-gnu
           echo "CT_CONNECT_TIMEOUT=30" >> .config
           echo "CT_DOWNLOAD_RETRIES=5" >> .config
           ct-ng build
